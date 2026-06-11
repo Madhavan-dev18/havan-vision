@@ -1,0 +1,232 @@
+"""
+EmotionEngine — Multi-emotion analysis service.
+
+Uses HuggingFace transformers (free, local inference):
+  - j-hartmann/emotion-english-distilroberta-base  (7 emotions)
+  - cardiffnlp/twitter-roberta-base-sentiment-latest (sentiment)
+
+Falls back gracefully to rule-based analysis if models not downloaded yet
+so the app remains functional from first boot.
+"""
+
+import json
+import logging
+import re
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Lazy-loaded model references
+_emotion_pipeline = None
+_sentiment_pipeline = None
+_models_attempted = False
+
+
+EMOTION_COLORS = {
+    "joy": "#FFD166",
+    "sadness": "#4A90D9",
+    "anger": "#EF476F",
+    "fear": "#9B5DE5",
+    "surprise": "#06D6A0",
+    "disgust": "#95A3A4",
+    "neutral": "#B0B0B0",
+}
+
+EMOTION_EMOJI = {
+    "joy": "😄",
+    "sadness": "😢",
+    "anger": "😠",
+    "fear": "😰",
+    "surprise": "😲",
+    "disgust": "🤢",
+    "neutral": "😐",
+}
+
+# Crisis / distress keywords for safety layer
+CRISIS_KEYWORDS = [
+    "suicide", "kill myself", "end my life", "want to die", "self-harm",
+    "harm myself", "cutting myself", "no reason to live", "hopeless",
+    "can't go on", "give up on life",
+]
+
+
+def _load_models():
+    """Attempt to load HuggingFace pipelines once."""
+    global _emotion_pipeline, _sentiment_pipeline, _models_attempted
+    if _models_attempted:
+        return
+    _models_attempted = True
+    try:
+        from transformers import pipeline
+        logger.info("Loading emotion model…")
+        _emotion_pipeline = pipeline(
+            "text-classification",
+            model="j-hartmann/emotion-english-distilroberta-base",
+            top_k=None,
+        )
+        logger.info("Loading sentiment model…")
+        _sentiment_pipeline = pipeline(
+            "text-classification",
+            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+            top_k=None,
+        )
+        logger.info("Emotion models loaded.")
+    except Exception as exc:
+        logger.warning(f"Could not load HuggingFace models ({exc}). Using rule-based fallback.")
+
+
+def _rule_based_emotion(text: str) -> dict:
+    """
+    Lightweight keyword-based emotion scorer.
+    Returns same shape as the HuggingFace pipeline result.
+    """
+    text_lower = text.lower()
+    keyword_map = {
+        "joy": ["happy", "excited", "great", "love", "wonderful", "awesome", "glad", "pleased", "yay", "😊", "😄"],
+        "sadness": ["sad", "unhappy", "depressed", "miserable", "crying", "cry", "tears", "grief", "miss", "lonely"],
+        "anger": ["angry", "furious", "hate", "mad", "rage", "annoyed", "frustrated", "awful", "stupid"],
+        "fear": ["scared", "afraid", "terrified", "anxious", "nervous", "worried", "panic", "dread"],
+        "surprise": ["wow", "surprised", "shocked", "unexpected", "unbelievable", "omg", "wait what"],
+        "disgust": ["disgusting", "gross", "horrible", "nasty", "awful", "yuck", "revolting"],
+    }
+    scores = {}
+    for emotion, keywords in keyword_map.items():
+        count = sum(1 for kw in keywords if kw in text_lower)
+        scores[emotion] = min(0.1 + count * 0.25, 0.95)
+
+    # Normalise so they sum to 1
+    total = sum(scores.values()) or 1
+    scores = {k: round(v / total, 4) for k, v in scores.items()}
+    scores["neutral"] = round(max(0.0, 1 - sum(scores.values())), 4)
+
+    primary = max(scores, key=lambda k: scores[k])
+    return {"primary": primary, "scores": scores}
+
+
+def _rule_based_sentiment(text: str) -> dict:
+    pos = ["good", "great", "happy", "love", "wonderful", "nice", "thanks", "yes", "excited"]
+    neg = ["bad", "hate", "sad", "terrible", "awful", "worst", "no", "never", "angry"]
+    t = text.lower()
+    p_count = sum(1 for w in pos if w in t)
+    n_count = sum(1 for w in neg if w in t)
+    if p_count > n_count:
+        return {"label": "positive", "score": 0.6}
+    if n_count > p_count:
+        return {"label": "negative", "score": 0.6}
+    return {"label": "neutral", "score": 0.55}
+
+
+def analyze(text: str) -> dict:
+    """
+    Full emotion analysis pipeline.
+
+    Returns:
+    {
+        "primary_emotion": str,
+        "emotion_scores": dict,      # all 7 emotion probabilities
+        "sentiment": str,            # positive | negative | neutral
+        "sentiment_score": float,
+        "intensity": float,          # 0-1, how emotionally charged
+        "is_crisis": bool,
+        "color": str,
+        "emoji": str,
+    }
+    """
+    _load_models()
+
+    text = text.strip()
+    if not text:
+        return _empty_result()
+
+    # ── Crisis detection (keyword-based, always runs) ──────────────────
+    is_crisis = any(kw in text.lower() for kw in CRISIS_KEYWORDS)
+
+    # ── Emotion scores ─────────────────────────────────────────────────
+    if _emotion_pipeline is not None:
+        try:
+            raw = _emotion_pipeline(text[:512])[0]  # list of {label, score}
+            scores = {item["label"].lower(): round(item["score"], 4) for item in raw}
+            primary = max(scores, key=lambda k: scores[k])
+        except Exception as exc:
+            logger.warning(f"Emotion pipeline failed: {exc}")
+            result = _rule_based_emotion(text)
+            scores = result["scores"]
+            primary = result["primary"]
+    else:
+        result = _rule_based_emotion(text)
+        scores = result["scores"]
+        primary = result["primary"]
+
+    # ── Sentiment ──────────────────────────────────────────────────────
+    if _sentiment_pipeline is not None:
+        try:
+            raw_sent = _sentiment_pipeline(text[:512])[0]
+            best = max(raw_sent, key=lambda x: x["score"])
+            label_map = {"positive": "positive", "negative": "negative", "neutral": "neutral"}
+            sentiment = label_map.get(best["label"].lower(), "neutral")
+            sentiment_score = round(best["score"], 4)
+        except Exception as exc:
+            logger.warning(f"Sentiment pipeline failed: {exc}")
+            sent = _rule_based_sentiment(text)
+            sentiment = sent["label"]
+            sentiment_score = sent["score"]
+    else:
+        sent = _rule_based_sentiment(text)
+        sentiment = sent["label"]
+        sentiment_score = sent["score"]
+
+    # ── Intensity: complement of neutral score ─────────────────────────
+    neutral_score = scores.get("neutral", 0.5)
+    intensity = round(1.0 - neutral_score, 4)
+
+    return {
+        "primary_emotion": primary,
+        "emotion_scores": scores,
+        "sentiment": sentiment,
+        "sentiment_score": sentiment_score,
+        "intensity": intensity,
+        "is_crisis": is_crisis,
+        "color": EMOTION_COLORS.get(primary, "#B0B0B0"),
+        "emoji": EMOTION_EMOJI.get(primary, "😐"),
+    }
+
+
+def _empty_result() -> dict:
+    return {
+        "primary_emotion": "neutral",
+        "emotion_scores": {"neutral": 1.0},
+        "sentiment": "neutral",
+        "sentiment_score": 0.5,
+        "intensity": 0.0,
+        "is_crisis": False,
+        "color": EMOTION_COLORS["neutral"],
+        "emoji": EMOTION_EMOJI["neutral"],
+    }
+
+
+def get_emotion_trend(emotion_list: list[dict]) -> dict:
+    """
+    Compute trend metrics from a list of emotion analysis dicts.
+    Used for the analytics dashboard.
+    """
+    if not emotion_list:
+        return {}
+
+    from collections import Counter
+    import statistics
+
+    primaries = [e.get("primary_emotion", "neutral") for e in emotion_list]
+    intensities = [e.get("intensity", 0.0) for e in emotion_list]
+    sentiments = [e.get("sentiment", "neutral") for e in emotion_list]
+
+    emotion_counts = Counter(primaries)
+    sentiment_counts = Counter(sentiments)
+
+    return {
+        "dominant_emotion": emotion_counts.most_common(1)[0][0],
+        "emotion_distribution": dict(emotion_counts),
+        "avg_intensity": round(statistics.mean(intensities), 3),
+        "intensity_trend": "rising" if intensities[-1] > intensities[0] else "falling" if intensities[-1] < intensities[0] else "stable",
+        "sentiment_distribution": dict(sentiment_counts),
+        "total_messages": len(emotion_list),
+    }
