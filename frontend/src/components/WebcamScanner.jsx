@@ -4,15 +4,19 @@ import { Brain, Camera, CameraOff } from "lucide-react";
 
 export default function WebcamScanner({ onEmotionDetected }) {
   const videoRef = useRef(null);
-  const timeoutRef = useRef(null); // safely tracks the timeout loop
+  const timeoutRef = useRef(null);
+  const isActiveRef = useRef(false); // FIXED: Ref to avoid stale closure
   const [isInitializing, setIsInitializing] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState("neutral");
 
-  // Cleanup to prevent memory leaks if the user navigates away
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      isActiveRef.current = false;
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      }
     };
   }, []);
 
@@ -41,6 +45,7 @@ export default function WebcamScanner({ onEmotionDetected }) {
           video.srcObject = stream;
           video.play();
           setIsCameraActive(true);
+          isActiveRef.current = true; // Sync ref with state
         }
       })
       .catch((err) => console.error("Error accessing webcam:", err));
@@ -50,21 +55,21 @@ export default function WebcamScanner({ onEmotionDetected }) {
     let video = videoRef.current;
     if (video && video.srcObject) {
       video.srcObject.getTracks().forEach((track) => track.stop());
-      setIsCameraActive(false);
-      // Kill the detection loop immediately
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+    }
+    setIsCameraActive(false);
+    isActiveRef.current = false; // Instantly break the loop
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
   };
 
   const handleVideoPlay = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
-    // Recursive function ensures frames process one at a time sequentially
+
     const scanFrame = async () => {
-      if (!isCameraActive || !videoRef.current) return;
+      // FIXED: Use ref to check active status to avoid the stale closure bug
+      if (!isActiveRef.current || !videoRef.current) return;
 
       try {
         const detections = await faceapi
@@ -76,17 +81,19 @@ export default function WebcamScanner({ onEmotionDetected }) {
           const dominant = Object.keys(expressions).reduce((a, b) =>
             expressions[a] > expressions[b] ? a : b
           );
-          
-          if (dominant !== currentEmotion) {
-            setCurrentEmotion(dominant);
-            if (onEmotionDetected) onEmotionDetected(dominant);
-          }
+
+          setCurrentEmotion((prev) => {
+            if (prev !== dominant) {
+              if (onEmotionDetected) onEmotionDetected(dominant);
+              return dominant;
+            }
+            return prev;
+          });
         }
       } catch (err) {
         console.warn("Frame scan failed:", err);
       }
 
-      // Schedule next scan ONLY after the current one finishes
       timeoutRef.current = setTimeout(scanFrame, 1000);
     };
 
@@ -117,7 +124,7 @@ export default function WebcamScanner({ onEmotionDetected }) {
         ) : !isCameraActive ? (
           <div className="text-azure-400/50 text-xs">Camera Offline</div>
         ) : null}
-        
+
         <video
           ref={videoRef}
           onPlay={handleVideoPlay}
