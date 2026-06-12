@@ -1,14 +1,11 @@
 """
 EmotionEngine — Multi-emotion analysis service.
 
-Uses HuggingFace transformers (free, local inference):
-  - j-hartmann/emotion-english-distilroberta-base  (7 emotions)
-  - cardiffnlp/twitter-roberta-base-sentiment-latest (sentiment)
-
-Falls back gracefully to rule-based analysis if models not downloaded yet
-so the app remains functional from first boot.
+Uses HuggingFace transformers (if sufficient RAM available),
+otherwise falls back safely to rule-based keyword analysis.
 """
 
+import os
 import json
 import logging
 import re
@@ -20,7 +17,6 @@ logger = logging.getLogger(__name__)
 _emotion_pipeline = None
 _sentiment_pipeline = None
 _models_attempted = False
-
 
 EMOTION_COLORS = {
     "joy": "#FFD166",
@@ -51,11 +47,18 @@ CRISIS_KEYWORDS = [
 
 
 def _load_models():
-    """Attempt to load HuggingFace pipelines once with better error handling."""
+    """Attempt to load HuggingFace pipelines ONLY if explicitly allowed."""
     global _emotion_pipeline, _sentiment_pipeline, _models_attempted
     if _models_attempted:
         return
     _models_attempted = True
+    
+    # KILL SWITCH: Prevent OOM Crashes on 512MB Free Tier Servers
+    # Unless USE_ML_MODELS is explicitly set to "true" in Render Environment, skip loading.
+    if os.getenv("USE_ML_MODELS", "false").lower() != "true":
+        logger.warning("ML Models disabled (USE_ML_MODELS != true). Using lightweight rule-based fallback to prevent OOM crash.")
+        return
+
     try:
         from transformers import pipeline
         logger.info("Loading emotion model (Requires >1GB RAM)…")
@@ -71,19 +74,14 @@ def _load_models():
             top_k=None,
         )
         logger.info("Emotion models successfully loaded into memory.")
-    except MemoryError:
-        logger.critical("OUT OF MEMORY: Your server cannot handle these HuggingFace models. Falling back to rules.")
+    except Exception as exc:
+        logger.critical(f"Failed to load HuggingFace models ({exc}). Falling back to rules.")
         _emotion_pipeline = None
         _sentiment_pipeline = None
-    except Exception as exc:
-        logger.warning(f"Could not load HuggingFace models ({exc}). Using rule-based fallback.")
 
 
 def _rule_based_emotion(text: str) -> dict:
-    """
-    Lightweight keyword-based emotion scorer.
-    Returns same shape as the HuggingFace pipeline result.
-    """
+    """Lightweight keyword-based emotion scorer."""
     text_lower = text.lower()
     keyword_map = {
         "joy": ["happy", "excited", "great", "love", "wonderful", "awesome", "glad", "pleased", "yay", "😊", "😄"],
@@ -100,19 +98,15 @@ def _rule_based_emotion(text: str) -> dict:
 
     total_matches = sum(raw_counts.values())
 
-    # No keyword matches anywhere -> definitively neutral. Don't let
-    # baseline scores tie-break into a random non-neutral emotion.
     if total_matches == 0:
         scores = {emotion: 0.0 for emotion in keyword_map}
         scores["neutral"] = 1.0
         return {"primary": "neutral", "scores": scores}
 
-    # Score only emotions that actually matched something
     scores = {}
     for emotion, count in raw_counts.items():
         scores[emotion] = min(0.15 + count * 0.25, 0.95) if count > 0 else 0.0
 
-    # Normalise so they sum to <= 1, leaving the remainder for neutral
     total = sum(scores.values())
     scores = {k: round(v / total, 4) for k, v in scores.items()}
     scores["neutral"] = round(max(0.0, 1 - sum(scores.values())), 4)
@@ -137,18 +131,6 @@ def _rule_based_sentiment(text: str) -> dict:
 def analyze(text: str) -> dict:
     """
     Full emotion analysis pipeline.
-
-    Returns:
-    {
-        "primary_emotion": str,
-        "emotion_scores": dict,      # all 7 emotion probabilities
-        "sentiment": str,            # positive | negative | neutral
-        "sentiment_score": float,
-        "intensity": float,          # 0-1, how emotionally charged
-        "is_crisis": bool,
-        "color": str,
-        "emoji": str,
-    }
     """
     _load_models()
 
@@ -162,7 +144,7 @@ def analyze(text: str) -> dict:
     # ── Emotion scores ─────────────────────────────────────────────────
     if _emotion_pipeline is not None:
         try:
-            raw = _emotion_pipeline(text[:512])[0]  # list of {label, score}
+            raw = _emotion_pipeline(text[:512])[0]
             scores = {item["label"].lower(): round(item["score"], 4) for item in raw}
             primary = max(scores, key=lambda k: scores[k])
         except Exception as exc:
@@ -223,10 +205,7 @@ def _empty_result() -> dict:
 
 
 def get_emotion_trend(emotion_list: list[dict]) -> dict:
-    """
-    Compute trend metrics from a list of emotion analysis dicts.
-    Used for the analytics dashboard.
-    """
+    """Compute trend metrics from a list of emotion analysis dicts."""
     if not emotion_list:
         return {}
 
