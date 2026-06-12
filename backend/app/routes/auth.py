@@ -60,9 +60,9 @@ def register():
         db.session.add(user)
         db.session.commit()
 
-        # Generate tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        # Generate tokens (identity must be a string for flask-jwt-extended)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
         # Attach tokens to HTTPOnly cookies
         response = jsonify({"user": user.to_public_dict()})
@@ -97,9 +97,9 @@ def login():
         user.last_seen = datetime.now(timezone.utc)
         db.session.commit()
 
-        # Generate tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        # Generate tokens (identity must be a string for flask-jwt-extended)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
         # Attach tokens to HTTPOnly cookies
         response = jsonify({"user": user.to_public_dict()})
@@ -125,7 +125,7 @@ def logout():
 @auth_bp.post("/refresh")
 @jwt_required(refresh=True)
 def refresh():
-    user_id = get_jwt_identity()
+    user_id = get_jwt_identity()  # already a string
     access_token = create_access_token(identity=user_id)
 
     response = jsonify({"msg": "Token refreshed"})
@@ -137,7 +137,7 @@ def refresh():
 @jwt_required()
 def me():
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = User.query.get(int(user_id))
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify({"user": user.to_public_dict()})
@@ -148,7 +148,7 @@ def me():
 def update_profile():
     try:
         user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        user = User.query.get(int(user_id))
         if not user:
             return jsonify({"error": "User not found"}), 404
 

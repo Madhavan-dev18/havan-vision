@@ -13,7 +13,7 @@ chat_bp = Blueprint("chat", __name__)
 @chat_bp.get("/sessions")
 @jwt_required()
 def list_sessions():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 50, type=int), 100)
     
@@ -28,7 +28,7 @@ def list_sessions():
 @chat_bp.post("/sessions")
 @jwt_required()
 def create_session():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "New conversation").strip()[:200]
     session = ConversationSession(user_id=user_id, title=title)
@@ -39,7 +39,7 @@ def create_session():
 @chat_bp.get("/sessions/<session_id>")
 @jwt_required()
 def get_session(session_id):
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     session = ConversationSession.query.filter_by(id=session_id, user_id=user_id).first()
     if not session:
         return jsonify({"error": "Session not found"}), 404
@@ -48,7 +48,7 @@ def get_session(session_id):
 @chat_bp.delete("/sessions/<session_id>")
 @jwt_required()
 def delete_session(session_id):
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     session = ConversationSession.query.filter_by(id=session_id, user_id=user_id).first()
     if not session:
         return jsonify({"error": "Session not found"}), 404
@@ -59,7 +59,7 @@ def delete_session(session_id):
 @chat_bp.post("/sessions/<session_id>/messages")
 @jwt_required()
 def send_message(session_id):
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     session = ConversationSession.query.filter_by(id=session_id, user_id=user_id).first()
     if not session:
         return jsonify({"error": "Session not found"}), 404
