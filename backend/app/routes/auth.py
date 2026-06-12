@@ -17,7 +17,7 @@ from app.models import User
 
 auth_bp = Blueprint("auth", __name__)
 
-# ── NEW: Utility route to wipe stale cookies ─────────────────────────────
+# ── Utility route to wipe stale/corrupted cookies ─────────────────────────
 @auth_bp.get("/clear")
 def clear_cookies():
     response = jsonify({"msg": "All stale cookies destroyed."})
@@ -42,9 +42,9 @@ def register():
         if len(password) < 8:
             return jsonify({"error": "Password must be at least 8 characters"}), 400
 
+        # Check for duplicates
         if User.query.filter_by(username=username).first():
             return jsonify({"error": "Username already taken"}), 409
-
         if User.query.filter_by(email=email).first():
             return jsonify({"error": "Email already registered"}), 409
 
@@ -71,8 +71,9 @@ def register():
 
     except Exception as e:
         db.session.rollback()
-        print(f"CRITICAL REGISTER ERROR: {str(e)}")
-        return jsonify({"error": f"Internal database error: {str(e)}"}), 500
+        # Log the actual error to your Render dashboard
+        print(f"CRITICAL REGISTER ERROR: {str(e)}") 
+        return jsonify({"error": "Registration failed due to a database error."}), 500
 
 
 @auth_bp.post("/login")
@@ -108,7 +109,7 @@ def login():
 
 @auth_bp.post("/logout")
 def logout():
-    # Because tokens are in cookies, the server must explicitly clear them
+    # Destroy the cookies server-side
     response = jsonify({"msg": "Logged out successfully"})
     unset_jwt_cookies(response)
     return response
