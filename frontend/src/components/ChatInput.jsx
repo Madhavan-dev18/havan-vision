@@ -3,6 +3,7 @@ import { Send } from 'lucide-react';
 
 export default function ChatInput({ onSend, disabled }) {
   const [value, setValue] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -13,12 +14,22 @@ export default function ChatInput({ onSend, disabled }) {
     }
   }, [value]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
-    setValue('');
+    if (!trimmed || disabled || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      // WAIT for the API request to finish before destroying the text
+      await onSend(trimmed);
+      setValue('');
+    } catch (err) {
+      // Don't nuke the text if the backend fails.
+      console.error("Message failed to send. Retaining input text.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -39,15 +50,20 @@ export default function ChatInput({ onSend, disabled }) {
           rows={1}
           maxLength={4000}
           placeholder="Share what's on your mind..."
-          className="w-full px-4 py-3 bg-transparent outline-none resize-none text-sm text-ink placeholder:text-azure-300 max-h-40"
+          disabled={isSubmitting}
+          className="w-full px-4 py-3 bg-transparent outline-none resize-none text-sm text-ink placeholder:text-azure-300 max-h-40 disabled:opacity-50"
         />
       </div>
       <button
         type="submit"
-        disabled={disabled || !value.trim()}
+        disabled={disabled || !value.trim() || isSubmitting}
         className="w-11 h-11 rounded-2xl bg-azure-600 hover:bg-azure-700 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center shrink-0 transition-all shadow-soft"
       >
-        <Send className="w-4.5 h-4.5" />
+        {isSubmitting ? (
+          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        ) : (
+          <Send className="w-4.5 h-4.5" />
+        )}
       </button>
     </form>
   );

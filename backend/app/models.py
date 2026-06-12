@@ -81,7 +81,7 @@ class Message(db.Model):
 
     # Emotion payload (only for user messages)
     primary_emotion = db.Column(db.String(32))
-    visual_emotion = db.Column(db.String(32), default="neutral") # The new visual data column
+    visual_emotion = db.Column(db.String(50), nullable=True, default=None) # FIXED: NO MORE "NEUTRAL" FAKE DATA
     emotion_scores = db.Column(db.Text)  # JSON blob: {"joy": 0.8, "sadness": 0.1, ...}
     sentiment = db.Column(db.String(16))  # positive | negative | neutral
     sentiment_score = db.Column(db.Float)

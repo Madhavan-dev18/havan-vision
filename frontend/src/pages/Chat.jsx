@@ -19,7 +19,9 @@ export default function Chat() {
   const [error, setError] = useState('');
   
   const [latestEmotion, setLatestEmotion] = useState(null);
-  const [visualEmotion, setVisualEmotion] = useState("neutral");
+  
+  // FIXED: Do not initialize with "neutral", otherwise mobile users corrupt the database
+  const [visualEmotion, setVisualEmotion] = useState(null);
 
   const scrollRef = useRef(null);
 
@@ -111,23 +113,23 @@ export default function Chat() {
         setActiveSessionId(sessionId);
       } catch (err) {
         setError('Could not start a new conversation.');
-        return;
+        throw err; // Forward error so input box doesn't clear
       }
     }
 
     const optimisticUserMsg = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content, // Keep the UI clean, don't show brackets to the user instantly
+      content,
       created_at: new Date().toISOString(),
       emotion: null,
     };
+    
     setMessages((prev) => [...prev, optimisticUserMsg]);
     setSending(true);
     setError('');
 
     try {
-      // Send content AND visualEmotion as separate, clean JSON variables
       const res = await api.post(`/chat/sessions/${sessionId}/messages`, { 
         content: content,
         visual_emotion: visualEmotion 
@@ -135,7 +137,7 @@ export default function Chat() {
       
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimisticUserMsg.id),
-        res.data.user_message, // No more regex cleanup needed!
+        res.data.user_message,
         res.data.assistant_message,
       ]);
       setLatestEmotion(res.data.emotion);
@@ -146,6 +148,9 @@ export default function Chat() {
     } catch (err) {
       setError(err.response?.data?.error || 'Message could not be sent. Please try again.');
       setMessages((prev) => prev.filter((m) => m.id !== optimisticUserMsg.id));
+      
+      // FIXED: Actually throw the error so the ChatInput component's catch block runs
+      throw err;
     } finally {
       setSending(false);
     }

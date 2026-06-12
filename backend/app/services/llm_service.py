@@ -46,10 +46,16 @@ def _call_groq(messages: list[dict], system_prompt: str, api_key: str, model: st
 
 def generate_response(user_message, emotion_data, conversation_history, groq_api_key, groq_model):
     """
-    Orchestrates the response. If the API fails, it logs why and uses a fallback.
+    Orchestrates the response. Fuses visual and text data if both are available.
     """
-    # 1. Build the context
-    system_prompt = f"You are an empathetic companion. Current emotion: {emotion_data.get('primary_emotion')}"
+    primary_text_emotion = emotion_data.get('primary_emotion', 'neutral')
+    visual_emotion = emotion_data.get('visual_emotion')
+    
+    # 1. Build the true context - Stop ignoring visual data
+    if visual_emotion and visual_emotion != "neutral":
+        system_prompt = f"You are an empathetic companion. The user's text emotion is {primary_text_emotion}, but their real-time facial expression shows {visual_emotion}. Address this combination appropriately."
+    else:
+        system_prompt = f"You are an empathetic companion. Current emotion: {primary_text_emotion}"
     
     # 2. Try the API
     llm_output = _call_groq(conversation_history[-6:], system_prompt, groq_api_key, groq_model)
