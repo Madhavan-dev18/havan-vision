@@ -8,7 +8,8 @@ import { Brain, Camera, CameraOff, Activity, AlertTriangle, Lightbulb, MoveDiago
 const BUFFER_SIZE = 90; // Rolling window of frames (approx 10-15 seconds)
 const MIN_FACE_AREA_PERCENT = 8; // Face must take up at least 8% of the camera
 const LIGHTING_CHECK_INTERVAL = 30; // Check lighting every 30 frames
-const TARGET_RESOLUTION = { width: 1280, height: 720 }; 
+// DROPPED from 1280x720 to prevent VRAM overflow
+const TARGET_RESOLUTION = { width: 640, height: 480 }; 
 
 export default function WebcamScanner({ onEmotionDetected }) {
   // --- Refs ---
@@ -69,7 +70,7 @@ export default function WebcamScanner({ onEmotionDetected }) {
   const startVideo = async () => {
     setCameraError("");
     try {
-      // Force hardware to provide HD stream. Do NOT accept 240p garbage.
+      // Force hardware to provide stream mapped to the lower resolution
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           width: { ideal: TARGET_RESOLUTION.width },
@@ -139,7 +140,7 @@ export default function WebcamScanner({ onEmotionDetected }) {
   const runInferenceLoop = async () => {
     // Escape hatch: Stop if unmounted or camera stopped
     if (!isActiveRef.current || !videoRef.current || videoRef.current.readyState !== 4) {
-      if (isActiveRef.current) loopRef.current = setTimeout(runInferenceLoop, 150);
+      if (isActiveRef.current) loopRef.current = setTimeout(runInferenceLoop, 400);
       return;
     }
 
@@ -232,8 +233,8 @@ export default function WebcamScanner({ onEmotionDetected }) {
       // Suppress frame drop noise
     }
 
-    // Maintain ~6fps inference rate to prevent browser freezing
-    loopRef.current = setTimeout(runInferenceLoop, 150); 
+    // SLOWED DOWN: Give the GPU's garbage collector time to breathe
+    loopRef.current = setTimeout(runInferenceLoop, 400); 
   };
 
   // Safe formatter for UI telemetry
@@ -306,8 +307,8 @@ export default function WebcamScanner({ onEmotionDetected }) {
         <video
           ref={videoRef}
           onPlay={runInferenceLoop}
-          width="1280"  // Force hardware canvas mapping
-          height="720"  // Force hardware canvas mapping
+          width="640"  // Matched to standard VGA
+          height="480" // Matched to standard VGA
           className={`w-full h-full object-cover transform -scale-x-100 ${!isCameraActive ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
           muted
           playsInline
