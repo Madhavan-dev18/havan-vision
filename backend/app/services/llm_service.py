@@ -15,10 +15,10 @@ EMPATHETIC_RESPONSES = {
     ("neutral", "neutral"): ["I'm here. What's on your mind?"]
 }
 
-def _call_groq(messages: list[dict], system_prompt: str, api_key: str, model: str) -> Optional[str]:
+ddef _call_groq(messages: list[dict], system_prompt: str, api_key: str, model: str) -> Optional[str]:
     """Sends request to Groq with explicit error debugging."""
     if not api_key:
-        logger.error("LLM Service Error: GROQ_API_KEY is missing from environment.")
+        logger.warning("LLM Service Warning: GROQ_API_KEY is empty. Using local fallback responses.")
         return None
     
     try:
@@ -35,7 +35,6 @@ def _call_groq(messages: list[dict], system_prompt: str, api_key: str, model: st
             timeout=10
         )
         
-        # LOGGING IS KEY: Check the Render logs for this output
         if response.status_code != 200:
             logger.error(f"Groq API returned {response.status_code}: {response.text}")
             return None

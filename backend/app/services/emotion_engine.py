@@ -51,14 +51,14 @@ CRISIS_KEYWORDS = [
 
 
 def _load_models():
-    """Attempt to load HuggingFace pipelines once."""
+    """Attempt to load HuggingFace pipelines once with better error handling."""
     global _emotion_pipeline, _sentiment_pipeline, _models_attempted
     if _models_attempted:
         return
     _models_attempted = True
     try:
         from transformers import pipeline
-        logger.info("Loading emotion model…")
+        logger.info("Loading emotion model (Requires >1GB RAM)…")
         _emotion_pipeline = pipeline(
             "text-classification",
             model="j-hartmann/emotion-english-distilroberta-base",
@@ -70,7 +70,11 @@ def _load_models():
             model="cardiffnlp/twitter-roberta-base-sentiment-latest",
             top_k=None,
         )
-        logger.info("Emotion models loaded.")
+        logger.info("Emotion models successfully loaded into memory.")
+    except MemoryError:
+        logger.critical("OUT OF MEMORY: Your server cannot handle these HuggingFace models. Falling back to rules.")
+        _emotion_pipeline = None
+        _sentiment_pipeline = None
     except Exception as exc:
         logger.warning(f"Could not load HuggingFace models ({exc}). Using rule-based fallback.")
 
