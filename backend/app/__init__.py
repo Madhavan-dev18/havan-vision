@@ -12,6 +12,7 @@ from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import os
+import re
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
@@ -33,13 +34,29 @@ def create_app(config_name: str = "development") -> Flask:
     jwt.init_app(app)
     limiter.init_app(app)
     
-    # ── NEW CORS CONFIGURATION ───────────────────────────────────────────
-    # Parse comma-separated origins from the environment variable
+    # ── CORS CONFIGURATION ────────────────────────────────────────────────
+    # Explicit origins from env (comma-separated) — covers custom domains,
+    # localhost dev, and your stable Vercel production alias.
     origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     allowed_origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
 
+    # Every Vercel deployment (preview AND "production") gets its own unique
+    # *.vercel.app URL, e.g. https://havan-a-emotion-aware-chat-assistant-XXXXXXXXX.vercel.app
+    # New URLs are generated on every push, so an exact-match allowlist breaks
+    # on each deploy. This regex allows any subdomain of vercel.app belonging
+    # to this project, in addition to the explicit origins above.
+    vercel_origin_regex = r"^https://havan-a-emotion-aware-chat-assistant[\w-]*\.vercel\.app$"
+
     # supports_credentials=True is MANDATORY when frontend uses withCredentials: true
-    CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": allowed_origins + [re.compile(vercel_origin_regex)],
+            }
+        },
+        supports_credentials=True,
+    )
 
     # ── Logging ──────────────────────────────────────────────────────────
     logging.basicConfig(
