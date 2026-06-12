@@ -44,9 +44,15 @@ export default function WebcamScanner({ onEmotionDetected }) {
     loadModels();
   }, []);
 
-  const startVideo = () => {
+ const startVideo = () => {
     navigator.mediaDevices
-      .getUserMedia({ video: { width: 320, height: 240 } })
+      .getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },  // Demand HD resolution
+          height: { ideal: 720 }, 
+          facingMode: "user"       // Explicitly request the front-facing camera
+        } 
+      })
       .then((stream) => {
         let video = videoRef.current;
         if (video) {
@@ -56,7 +62,11 @@ export default function WebcamScanner({ onEmotionDetected }) {
           isActiveRef.current = true;
         }
       })
-      .catch((err) => console.error("Error accessing webcam:", err));
+      .catch((err) => {
+        console.error("Error accessing high-res webcam:", err);
+        // Fallback if the user has a literal potato for a camera
+        alert("Could not access HD webcam. Check permissions.");
+      });
   };
 
   const stopVideo = () => {
