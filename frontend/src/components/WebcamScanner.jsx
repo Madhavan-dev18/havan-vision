@@ -7,7 +7,6 @@ export default function WebcamScanner({ onEmotionDetected }) {
   const timeoutRef = useRef(null);
   const isActiveRef = useRef(false);
   
-  // The Emotion Buffer prevents rapid text flickering
   const emotionBuffer = useRef([]); 
   
   const [isInitializing, setIsInitializing] = useState(true);
@@ -75,9 +74,9 @@ export default function WebcamScanner({ onEmotionDetected }) {
       if (!isActiveRef.current || !videoRef.current) return;
 
       try {
-        // MAX ACCURACY SETTINGS: High resolution, low threshold
+        // Lowered inputSize to 416 so it doesn't violently lag the browser
         const options = new faceapi.TinyFaceDetectorOptions({ 
-          inputSize: 608, 
+          inputSize: 416, 
           scoreThreshold: 0.2 
         });
 
@@ -87,44 +86,54 @@ export default function WebcamScanner({ onEmotionDetected }) {
 
         if (detections) {
           const expressions = detections.expressions;
-          let dominant = "neutral";
-          let maxAdjustedScore = 0;
+          
+          // 1. Explicitly isolate the strongest real emotion, ignoring neutral
+          let highestNonNeutralEmotion = "neutral";
+          let highestNonNeutralScore = 0;
 
           for (const [emotion, score] of Object.entries(expressions)) {
-            // Aggressive sensitivity booster to break out of "neutral"
-            const multiplier = emotion === "neutral" ? 1.0 : 1.5; 
-            const adjustedScore = score * multiplier;
-
-            if (adjustedScore > maxAdjustedScore) {
-              maxAdjustedScore = adjustedScore;
-              dominant = emotion;
+            if (emotion !== "neutral" && score > highestNonNeutralScore) {
+              highestNonNeutralScore = score;
+              highestNonNeutralEmotion = emotion;
             }
           }
 
-          // FLICKER PROTECTION: Require 3 consecutive matching frames to change UI
-          emotionBuffer.current.push(dominant);
-          if (emotionBuffer.current.length > 3) {
-            emotionBuffer.current.shift(); // Keep only the last 3 frames
+          // 2. If a real emotion has even 10% confidence, prioritize it. 
+          // Stop letting the 90% resting neutral face win every single frame.
+          let detectedEmotion = highestNonNeutralScore > 0.1 ? highestNonNeutralEmotion : "neutral";
+
+          // 3. Fix the buffer: use a rolling window of 5 frames
+          emotionBuffer.current.push(detectedEmotion);
+          if (emotionBuffer.current.length > 5) {
+            emotionBuffer.current.shift();
           }
 
-          // If all 3 recent frames agree, update the state
-          if (emotionBuffer.current.every(val => val === emotionBuffer.current[0])) {
-            const stableEmotion = emotionBuffer.current[0];
-            setCurrentEmotion((prev) => {
-              if (prev !== stableEmotion) {
-                if (onEmotionDetected) onEmotionDetected(stableEmotion);
-                return stableEmotion;
-              }
-              return prev;
-            });
+          // 4. Determine the 'majority rules' emotion, allowing for frame jitter
+          const counts = {};
+          let mostFrequentEmotion = "neutral";
+          let maxCount = 0;
+          for (const e of emotionBuffer.current) {
+            counts[e] = (counts[e] || 0) + 1;
+            if (counts[e] > maxCount) {
+              maxCount = counts[e];
+              mostFrequentEmotion = e;
+            }
           }
+
+          // Update state
+          setCurrentEmotion((prev) => {
+            if (prev !== mostFrequentEmotion) {
+              if (onEmotionDetected) onEmotionDetected(mostFrequentEmotion);
+              return mostFrequentEmotion;
+            }
+            return prev;
+          });
         }
       } catch (err) {
-        console.warn("Frame scan failed:", err);
+        // Ignore expected dropped frames
       }
 
-      // HYPERSPEED POLLING: 150ms (approx 6.6 FPS) instead of 1000ms
-      timeoutRef.current = setTimeout(scanFrame, 150);
+      timeoutRef.current = setTimeout(scanFrame, 200); 
     };
 
     scanFrame();
