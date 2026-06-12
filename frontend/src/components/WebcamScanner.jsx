@@ -5,7 +5,7 @@ import { Brain, Camera, CameraOff, Activity, AlertTriangle, Lightbulb, MoveDiago
 // ============================================================================
 // CONSTANTS & CONFIGURATION
 // ============================================================================
-const BUFFER_SIZE = 12; // Rolling window of frames (approx 1.5 seconds)
+const BUFFER_SIZE = 90; // Rolling window of frames (approx 10-15 seconds)
 const MIN_FACE_AREA_PERCENT = 8; // Face must take up at least 8% of the camera
 const LIGHTING_CHECK_INTERVAL = 30; // Check lighting every 30 frames
 const TARGET_RESOLUTION = { width: 1280, height: 720 }; 
@@ -44,7 +44,8 @@ export default function WebcamScanner({ onEmotionDetected }) {
   useEffect(() => {
     const loadHeavyModels = async () => {
       try {
-        const MODEL_URL = "https://unpkg.com/@vladmandic/face-api/model/";
+        // FIXED: Pointing to local assets instead of a 3rd party CDN
+        const MODEL_URL = "/models";
         // We use SSD MobileNet V1 because it is mathematically superior to TinyFace
         await Promise.all([
           faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
@@ -121,13 +122,15 @@ export default function WebcamScanner({ onEmotionDetected }) {
     const imageData = ctx.getImageData(0, 0, 64, 64).data;
     let brightnessSum = 0;
     
-    // Sample every 4th pixel (RGBA format)
-    for (let i = 0; i < imageData.length; i += 4) {
+    // FIXED: i += 16 jumps by 4 full pixels. 
+    // Previous i += 4 just jumped 1 pixel (R, G, B, A).
+    for (let i = 0; i < imageData.length; i += 16) {
       // Perceived luminance formula
       brightnessSum += (0.299 * imageData[i] + 0.587 * imageData[i+1] + 0.114 * imageData[i+2]);
     }
     
-    const avgBrightness = brightnessSum / (64 * 64);
+    // Adjust division to match the new sampling count (1024 samples instead of 4096)
+    const avgBrightness = brightnessSum / 1024;
     // If average brightness is below 40 (out of 255), the room is practically pitch black for an AI
     setWarnings(prev => ({ ...prev, lowLight: avgBrightness < 40 }));
   };

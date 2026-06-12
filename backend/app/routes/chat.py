@@ -20,14 +20,21 @@ chat_bp = Blueprint("chat", __name__)
 @jwt_required()
 def list_sessions():
     user_id = get_jwt_identity()
-    sessions = (
+    # Implement dynamic pagination (default 50, max 100)
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 50, type=int), 100)
+    
+    pagination = (
         ConversationSession.query
         .filter_by(user_id=user_id, is_archived=False)
         .order_by(ConversationSession.updated_at.desc())
-        .limit(50)
-        .all()
+        .paginate(page=page, per_page=per_page, error_out=False)
     )
-    return jsonify({"sessions": [s.to_dict() for s in sessions]})
+    return jsonify({
+        "sessions": [s.to_dict() for s in pagination.items],
+        "total": pagination.total,
+        "pages": pagination.pages
+    })
 
 
 @chat_bp.post("/sessions")
@@ -83,6 +90,10 @@ def send_message(session_id):
 
     if not content:
         return jsonify({"error": "Message content required"}), 400
+        
+    # NEW: Hard limit on text payload to prevent token-burn attacks
+    if len(content) > 1500:
+        return jsonify({"error": "Message exceeds maximum length of 1500 characters"}), 413
 
     # 1. Analyse textual emotion
     emotion_data = emotion_engine.analyze(content)
@@ -102,8 +113,6 @@ def send_message(session_id):
         intensity=emotion_data["intensity"],
     )
     db.session.add(user_msg)
-    
-    # ... keep the rest of the function the same ...
 
     # ── 3. Build conversation history for LLM context ───────────────────
     history = [
@@ -112,7 +121,6 @@ def send_message(session_id):
     ]
 
     # ── 4. Generate response ─────────────────────────────────────────────
-# ── 4. Generate response ─────────────────────────────────────────────
     llm_result = llm_service.generate_response(
         user_message=content,
         emotion_data=emotion_data,
