@@ -3,7 +3,7 @@ from datetime import timedelta
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-fallback-key")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///moodlens.db")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///havanvision.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
@@ -27,10 +27,18 @@ class ProductionConfig(Config):
         "pool_recycle": 300,
         "pool_size": 5,
         "max_overflow": 0,
-        "connect_args": {
-            "sslmode": "require",
-            "options": "-c statement_cache_size=0",
-        },
     }
+
+    def __init__(self):
+        super().__init__()
+        db_url = os.getenv("DATABASE_URL", "")
+        if "postgresql" in db_url or "postgres" in db_url:
+            self.SQLALCHEMY_ENGINE_OPTIONS = {
+                **self.SQLALCHEMY_ENGINE_OPTIONS,
+                "connect_args": {
+                    "sslmode": "require",
+                    "options": "-c statement_cache_size=0",
+                },
+            }
 
 config_map = {"development": DevelopmentConfig, "production": ProductionConfig, "default": DevelopmentConfig}

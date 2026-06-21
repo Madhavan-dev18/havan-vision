@@ -176,7 +176,7 @@ export default function Chat() {
               <h2 className="font-display font-semibold text-ink text-lg leading-tight truncate max-w-sm md:max-w-md">
                 {sessions.find((s) => s.id === activeSessionId)?.title || 'New conversation'}
               </h2>
-              <p className="text-xs text-azure-700/50">MoodLens responds with emotional context</p>
+              <p className="text-xs text-azure-700/50">Havan Vision responds with emotional context</p>
             </div>
           </div>
           {latestEmotion && <EmotionBadge emotion={latestEmotion} />}
@@ -203,7 +203,7 @@ export default function Chat() {
                       How are you feeling today?
                     </h3>
                     <p className="text-sm text-azure-700/60 max-w-sm">
-                      MoodLens listens, detects the emotion behind your words, and responds with
+                      Havan Vision listens, detects the emotion behind your words, and responds with
                       genuine empathy and context.
                     </p>
                   </div>
@@ -230,7 +230,7 @@ export default function Chat() {
                 <ChatInput onSend={handleSend} disabled={sending} />
                 <p className="text-xs text-azure-700/40 text-center mt-2 flex items-center justify-center gap-1.5">
                   <Brain className="w-3 h-3" />
-                  MoodLens is a supportive companion, not a substitute for professional care.
+                  Havan Vision is a supportive companion, not a substitute for professional care.
                 </p>
               </div>
             </div>
@@ -244,7 +244,7 @@ export default function Chat() {
                 <Brain className="w-4 h-4 text-azure-600" />
                 Omni-Sensor Active
               </p>
-              J.A.R.V.I.S. is monitoring your facial micro-expressions in real-time. This visual telemetry is fused with your text input to generate a highly accurate, composite emotional profile.
+              Havan Vision is monitoring your facial micro-expressions in real-time. This visual telemetry is fused with your text input to generate a highly accurate, composite emotional profile.
             </div>
           </div>
         </div>

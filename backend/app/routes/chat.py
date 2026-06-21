@@ -74,7 +74,7 @@ def send_message(session_id):
         return jsonify({"error": "Message exceeds maximum length of 1500 characters"}), 413
 
     # SECURE ENUM VALIDATION
-    VALID_EMOTIONS = {"neutral", "happy", "sad", "angry", "surprised", "fear"}
+    VALID_EMOTIONS = {"neutral", "happy", "sad", "angry", "surprised", "fear", "joy", "sadness", "anger", "surprise", "disgust"}
     visual_emotion = raw_visual_emotion if raw_visual_emotion in VALID_EMOTIONS else "neutral"
 
     emotion_data = emotion_engine.analyze(content)

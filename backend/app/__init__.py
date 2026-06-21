@@ -1,5 +1,5 @@
 """
-MoodLens — Emotion-Aware AI Chat
+Havan Vision — Emotion-Aware AI Chat
 Flask application factory.
 """
 from flask import Flask
@@ -45,7 +45,7 @@ def create_app(config_name: str = "development") -> Flask:
     # New URLs are generated on every push, so an exact-match allowlist breaks
     # on each deploy. This regex allows any subdomain of vercel.app belonging
     # to this project, in addition to the explicit origins above.
-    vercel_origin_regex = r"^https://havan-a-emotion-aware-chat-assistant[\w-]*\.vercel\.app$"
+    vercel_origin_regex = r"^https://havan-vision[\w-]*\.vercel\.app$"
 
     # supports_credentials=True is REMOVED. Headers are allowed for JWT Bearer auth.
     CORS(

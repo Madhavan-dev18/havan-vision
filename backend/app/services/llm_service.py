@@ -1,6 +1,9 @@
 """LLM Service: Groq integration with Crisis Interceptor and Rule-Based Fallback."""
 import os
+import logging
 from groq import Groq
+
+logger = logging.getLogger(__name__)
 
 EMPATHETIC_RESPONSES = {
     ("sadness", "negative"): "I hear how difficult this is for you right now. I'm here to listen.",
@@ -26,7 +29,7 @@ def generate_response(user_message, emotion_data, conversation_history, groq_api
     try:
         client = Groq(api_key=groq_api_key)
         
-        system_prompt = f"""You are MoodLens, an empathetic AI companion.
+        system_prompt = f"""You are Havan Vision, an empathetic AI companion.
 User's text emotion: {emotion_data.get('primary_emotion')}
 User's facial telemetry: {emotion_data.get('visual_emotion')}
 Match your tone to their state. Be concise, supportive, and grounded."""
@@ -42,7 +45,7 @@ Match your tone to their state. Be concise, supportive, and grounded."""
         )
         return {"content": chat_completion.choices[0].message.content, "source": "groq_llm"}
     except Exception as e:
-        print(f"LLM Error: {e}")
+        logger.error(f"LLM Error: {e}")
         return _rule_based_fallback(emotion_data)
 
 def _rule_based_fallback(emotion_data):

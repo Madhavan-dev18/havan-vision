@@ -32,7 +32,7 @@ export default function Login() {
           <div className="w-14 h-14 rounded-2xl bg-azure-600 flex items-center justify-center shadow-soft mb-4">
             <Brain className="w-7 h-7 text-white" strokeWidth={2} />
           </div>
-          <h1 className="font-display text-3xl font-semibold text-ink tracking-tight">MoodLens</h1>
+          <h1 className="font-display text-3xl font-semibold text-ink tracking-tight">Havan Vision</h1>
           <p className="text-azure-700/70 text-sm mt-1">Welcome back. Let's pick up where you left off.</p>
         </div>
 
@@ -85,7 +85,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-sm text-azure-700/70 mt-6">
-          New to MoodLens?{' '}
+          New to Havan Vision?{' '}
           <Link to="/register" className="text-azure-600 font-semibold hover:text-azure-800 transition-colors">
             Create an account
           </Link>

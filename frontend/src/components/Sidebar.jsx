@@ -24,7 +24,7 @@ export default function Sidebar({ sessions, activeSessionId, onSelectSession, on
             <Brain className="w-5 h-5 text-white" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-display font-semibold text-ink leading-tight">MoodLens</h1>
+            <h1 className="font-display font-semibold text-ink leading-tight">Havan Vision</h1>
             <p className="text-xs text-azure-700/60">Emotion-aware AI</p>
           </div>
           <button

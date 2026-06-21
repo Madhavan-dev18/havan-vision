@@ -48,7 +48,7 @@ export default function ChatInput({ onSend, disabled }) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          maxLength={4000}
+          maxLength={1500}
           placeholder="Share what's on your mind..."
           disabled={isSubmitting}
           className="w-full px-4 py-3 bg-transparent outline-none resize-none text-sm text-ink placeholder:text-azure-300 max-h-40 disabled:opacity-50"
